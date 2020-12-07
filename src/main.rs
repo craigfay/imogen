@@ -3,21 +3,32 @@ use actix_web::{
     web, dev::BodyEncoding, get, http::ContentEncoding, middleware, App, HttpResponse, HttpServer,
 };
 
+// use serde::serde_derive::Deserialize;
+use serde::{Serialize, Deserialize};
+
+
 use image::io::Reader as ImageReader;
 use image::DynamicImage;
 use image::ImageError;
 use image::ImageOutputFormat::{Png};
 
-fn image_bytes() -> Result<Vec<u8>, ImageError> {
+fn image_bytes(filename: &str) -> Result<Vec<u8>, ImageError> {
     let mut buffer: Vec<u8> = Vec::new();
-    let img = ImageReader::open("rust.png")?.decode()?;
+    let img = ImageReader::open(filename)?.decode()?;
     img.write_to(&mut buffer, Png)?;
 
     Ok(buffer)
 }
 
-async fn index() -> HttpResponse {
-    match image_bytes() {
+#[derive(Deserialize)]
+struct Info {
+    filename: String,
+}
+
+async fn index(info: web::Path<Info>) -> HttpResponse {
+    let filename = &info.filename;
+
+    match image_bytes(&filename) {
         Ok(buffer) => {
             HttpResponse::Ok()
                 .header("content-type", "image/png")
@@ -31,7 +42,7 @@ async fn index() -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new().service(
-            web::resource("/{filename}.{extension}")
+            web::resource("/{filename}")
                 .route(web::get().to(index))
         )
 
