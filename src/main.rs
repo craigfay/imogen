@@ -1,6 +1,6 @@
 
 use actix_web::{
-    dev::BodyEncoding, get, http::ContentEncoding, middleware, App, HttpResponse, HttpServer,
+    web, dev::BodyEncoding, get, http::ContentEncoding, middleware, App, HttpResponse, HttpServer,
 };
 
 use image::io::Reader as ImageReader;
@@ -16,7 +16,6 @@ fn image_bytes() -> Result<Vec<u8>, ImageError> {
     Ok(buffer)
 }
 
-#[get("/")]
 async fn index() -> HttpResponse {
     match image_bytes() {
         Ok(buffer) => {
@@ -31,9 +30,11 @@ async fn index() -> HttpResponse {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
-        App::new()
-            .wrap(middleware::Compress::new(ContentEncoding::Br))
-            .service(index)
+        App::new().service(
+            web::resource("/{filename}.{extension}")
+                .route(web::get().to(index))
+        )
+
     })
     .bind("127.0.0.1:8080")?
     .run()
