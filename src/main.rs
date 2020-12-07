@@ -12,6 +12,7 @@ use image::DynamicImage;
 use image::ImageError;
 use image::ImageOutputFormat::{Png};
 
+
 fn image_bytes(file: &FileInfo, conversion: &ConversionInfo) -> Result<Vec<u8>, ImageError> {
 
     let full_filename = format!("{}.{}", &file.name, &file.extension);
@@ -22,6 +23,7 @@ fn image_bytes(file: &FileInfo, conversion: &ConversionInfo) -> Result<Vec<u8>, 
 
     Ok(buffer)
 }
+
 
 #[derive(Deserialize)]
 struct FileInfo {
@@ -39,12 +41,17 @@ async fn index(
     conversion: web::Query<ConversionInfo>,
 ) -> HttpResponse {
 
+    let extension = match &conversion.extension {
+        Some(e) => &e,
+        None => &file.extension,
+    };
+
     match image_bytes(&file, &conversion) {
         Ok(buffer) => {
             HttpResponse::Ok()
-                .header("content-type", "image/png")
+                .header("content-type", format!("image/{}", extension))
                 .body(buffer)
-        }
+        },
         Err(_) => HttpResponse::NotFound().finish()
     }
 }
