@@ -12,27 +12,34 @@ use image::DynamicImage;
 use image::ImageError;
 use image::ImageOutputFormat::{Png};
 
-fn image_bytes(filename: &str) -> Result<Vec<u8>, ImageError> {
+fn image_bytes(file: &FileInfo, conversion: &ConversionInfo) -> Result<Vec<u8>, ImageError> {
+
+    let full_filename = format!("{}.{}", &file.name, &file.extension);
+
     let mut buffer: Vec<u8> = Vec::new();
-    let img = ImageReader::open(filename)?.decode()?;
+    let img = ImageReader::open(full_filename)?.decode()?;
     img.write_to(&mut buffer, Png)?;
 
     Ok(buffer)
 }
 
 #[derive(Deserialize)]
-struct Info {
-    filename: String,
+struct FileInfo {
+    name: String,
     extension: String,
 }
 
-async fn index(info: web::Path<Info>) -> HttpResponse {
-    let filename = &info.filename;
-    let extension = &info.extension;
+#[derive(Deserialize)]
+struct ConversionInfo {
+    extension: Option<String>,
+}
 
-    let full_filename = format!("{}.{}", &filename, &extension);
+async fn index(
+    file: web::Path<FileInfo>,
+    conversion: web::Query<ConversionInfo>,
+) -> HttpResponse {
 
-    match image_bytes(&full_filename) {
+    match image_bytes(&file, &conversion) {
         Ok(buffer) => {
             HttpResponse::Ok()
                 .header("content-type", "image/png")
@@ -46,7 +53,7 @@ async fn index(info: web::Path<Info>) -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new().service(
-            web::resource("/{filename}.{extension}")
+            web::resource("/{name}.{extension}")
                 .route(web::get().to(index))
         )
 
