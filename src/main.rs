@@ -23,12 +23,16 @@ fn image_bytes(filename: &str) -> Result<Vec<u8>, ImageError> {
 #[derive(Deserialize)]
 struct Info {
     filename: String,
+    extension: String,
 }
 
 async fn index(info: web::Path<Info>) -> HttpResponse {
     let filename = &info.filename;
+    let extension = &info.extension;
 
-    match image_bytes(&filename) {
+    let full_filename = format!("{}.{}", &filename, &extension);
+
+    match image_bytes(&full_filename) {
         Ok(buffer) => {
             HttpResponse::Ok()
                 .header("content-type", "image/png")
@@ -42,7 +46,7 @@ async fn index(info: web::Path<Info>) -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new().service(
-            web::resource("/{filename}")
+            web::resource("/{filename}.{extension}")
                 .route(web::get().to(index))
         )
 
