@@ -34,6 +34,8 @@ struct FileInfo {
 #[derive(Deserialize)]
 struct ConversionInfo {
     extension: Option<String>,
+    width: Option<u32>,
+    height: Option<u32>,
 }
 
 async fn index(
