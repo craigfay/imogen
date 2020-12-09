@@ -3,8 +3,7 @@ use actix_web::{
     web, dev::BodyEncoding, get, http::ContentEncoding, middleware, App, HttpResponse, HttpServer,
 };
 
-// use serde::serde_derive::Deserialize;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize};
 
 
 use image::io::Reader as ImageReader;
