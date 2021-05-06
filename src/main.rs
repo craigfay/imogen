@@ -10,16 +10,22 @@ use serde::{Serialize, Deserialize};
 use image::io::Reader as ImageReader;
 use image::DynamicImage;
 use image::ImageError;
-use image::ImageOutputFormat::{Png};
+use image::ImageOutputFormat;
 
 
-fn image_bytes(file: &FileInfo, conversion: &ConversionInfo) -> Result<Vec<u8>, ImageError> {
+fn image_bytes(file: &FileInfo, conversion: &ConversionOptions) -> Result<Vec<u8>, ImageError> {
 
     let full_filename = format!("{}.{}", &file.name, &file.extension);
 
     let mut buffer: Vec<u8> = Vec::new();
-    let img = ImageReader::open(full_filename)?.decode()?;
-    img.write_to(&mut buffer, Png)?;
+
+    let img = ImageReader::open(full_filename)?.with_guessed_format()?;
+
+    // Use ConversionOptions to do resizing / reformatting of `img` here.
+
+    let decoded = img.decode()?;
+
+    decoded.write_to(&mut buffer, conversion.output_format.clone())?;
 
     Ok(buffer)
 }
@@ -32,24 +38,63 @@ struct FileInfo {
 }
 
 #[derive(Deserialize)]
-struct ConversionInfo {
+struct RawConversionOptions {
     extension: Option<String>,
+}
+
+struct ConversionOptions {
+    output_format: ImageOutputFormat,
+    // TODO output_dimensions
+}
+
+fn extension_to_output_format(extension: &str) -> ImageOutputFormat {
+    match extension {
+        "jpeg" => ImageOutputFormat::Jpeg(255),
+        "png" => ImageOutputFormat::Png,
+        _ => ImageOutputFormat::Png,
+    }
+}
+
+fn extension_from_output_format(output_format: &ImageOutputFormat) -> String {
+    match output_format {
+        ImageOutputFormat::Jpeg(255) => "jpeg",
+        ImageOutputFormat::Png => "png",
+        _ => "png",
+    }.to_string()
+}
+
+fn validate_conversion(
+    file: &FileInfo,
+    raw: &RawConversionOptions,
+) -> ConversionOptions {
+
+    let output_format = match &raw.extension {
+        Some(e) => extension_to_output_format(&e),
+        None => extension_to_output_format(&file.extension),
+    };
+
+    ConversionOptions {
+        output_format
+    }
+
 }
 
 async fn index(
     file: web::Path<FileInfo>,
-    conversion: web::Query<ConversionInfo>,
+    raw_conversion_options: web::Query<RawConversionOptions>,
 ) -> HttpResponse {
 
-    let extension = match &conversion.extension {
-        Some(e) => &e,
-        None => &file.extension,
-    };
+    let conversion_options = validate_conversion(&file, &raw_conversion_options);
 
-    match image_bytes(&file, &conversion) {
+    let content_type = format!(
+        "image/{}",
+        extension_from_output_format(&conversion_options.output_format)
+    );
+
+    match image_bytes(&file, &conversion_options) {
         Ok(buffer) => {
             HttpResponse::Ok()
-                .header("content-type", format!("image/{}", extension))
+                .header("content-type", content_type)
                 .body(buffer)
         },
         Err(_) => HttpResponse::NotFound().finish()
