@@ -3,7 +3,6 @@ use actix_web::{
     web, dev::BodyEncoding, get, http::ContentEncoding, middleware, App, HttpResponse, HttpServer,
 };
 
-// use serde::serde_derive::Deserialize;
 use serde::{Serialize, Deserialize};
 
 
@@ -21,9 +20,9 @@ fn image_bytes(file: &FileInfo, conversion: &ConversionOptions) -> Result<Vec<u8
 
     let img = ImageReader::open(full_filename)?.with_guessed_format()?;
 
-    // Use ConversionOptions to do resizing / reformatting of `img` here.
-
     let decoded = img.decode()?;
+
+    let webp_encoder = webp::Encoder::from_image(&decoded);
 
     decoded.write_to(&mut buffer, conversion.output_format.clone())?;
 
@@ -97,7 +96,10 @@ async fn index(
                 .header("content-type", content_type)
                 .body(buffer)
         },
-        Err(_) => HttpResponse::NotFound().finish()
+        Err(e) => {
+            println!("{:?}", e);
+            HttpResponse::NotFound().finish()
+        }
     }
 }
 
