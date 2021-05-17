@@ -1,116 +1,64 @@
 
 use actix_web::{
-    web, dev::BodyEncoding, get, http::ContentEncoding, middleware, App, HttpResponse, HttpServer,
+    web,
+    App,
+    HttpResponse,
+    HttpServer,
 };
 
-use serde::{Serialize, Deserialize};
-
-
 use image::io::Reader as ImageReader;
-use image::DynamicImage;
 use image::ImageError;
 use image::ImageOutputFormat;
 
 
-fn image_bytes(file: &FileInfo, conversion: &ConversionOptions) -> Result<Vec<u8>, ImageError> {
-
-    let full_filename = format!("{}.{}", &file.name, &file.extension);
-
+// Return the bytes of a static png file after converting to webp format.
+fn image_as_webp() -> Result<Vec<u8>, ImageError> {
+    let full_filename = "rust.png";
     let mut buffer: Vec<u8> = Vec::new();
 
     let img = ImageReader::open(full_filename)?.with_guessed_format()?;
-
     let decoded = img.decode()?;
 
     let webp_encoder = webp::Encoder::from_image(&decoded);
+    let webp = webp_encoder.encode_lossless();
 
-    decoded.write_to(&mut buffer, conversion.output_format.clone())?;
+    for i in 0..webp.len() {
+        buffer.push(webp[i]);
+    }
 
     Ok(buffer)
 }
 
-
-#[derive(Deserialize)]
-struct FileInfo {
-    name: String,
-    extension: String,
+// Return the bytes of a static png file 
+fn image_as_png() -> Result<Vec<u8>, ImageError> {
+    let full_filename = "rust.png";
+    let mut buffer: Vec<u8> = Vec::new();
+    let img = ImageReader::open(full_filename)?.with_guessed_format()?;
+    let decoded = img.decode()?;
+    decoded.write_to(&mut buffer, ImageOutputFormat::Png)?;
+    Ok(buffer)
 }
 
-#[derive(Deserialize)]
-struct RawConversionOptions {
-    extension: Option<String>,
+fn png_handler() -> HttpResponse {
+    let buffer = image_as_png().unwrap();
+    HttpResponse::Ok()
+        .header("content-type", "image/png")
+        .body(buffer)
 }
 
-struct ConversionOptions {
-    output_format: ImageOutputFormat,
-    // TODO output_dimensions
-}
-
-fn extension_to_output_format(extension: &str) -> ImageOutputFormat {
-    match extension {
-        "jpeg" => ImageOutputFormat::Jpeg(255),
-        "png" => ImageOutputFormat::Png,
-        _ => ImageOutputFormat::Png,
-    }
-}
-
-fn extension_from_output_format(output_format: &ImageOutputFormat) -> String {
-    match output_format {
-        ImageOutputFormat::Jpeg(255) => "jpeg",
-        ImageOutputFormat::Png => "png",
-        _ => "png",
-    }.to_string()
-}
-
-fn validate_conversion(
-    file: &FileInfo,
-    raw: &RawConversionOptions,
-) -> ConversionOptions {
-
-    let output_format = match &raw.extension {
-        Some(e) => extension_to_output_format(&e),
-        None => extension_to_output_format(&file.extension),
-    };
-
-    ConversionOptions {
-        output_format
-    }
-
-}
-
-async fn index(
-    file: web::Path<FileInfo>,
-    raw_conversion_options: web::Query<RawConversionOptions>,
-) -> HttpResponse {
-
-    let conversion_options = validate_conversion(&file, &raw_conversion_options);
-
-    let content_type = format!(
-        "image/{}",
-        extension_from_output_format(&conversion_options.output_format)
-    );
-
-    match image_bytes(&file, &conversion_options) {
-        Ok(buffer) => {
-            HttpResponse::Ok()
-                .header("content-type", content_type)
-                .body(buffer)
-        },
-        Err(e) => {
-            println!("{:?}", e);
-            HttpResponse::NotFound().finish()
-        }
-    }
+fn webp_handler() -> HttpResponse {
+    let buffer = image_as_webp().unwrap();
+    HttpResponse::Ok()
+        .header("content-type", "image/webp")
+        .body(buffer)
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
-        App::new().service(
-            web::resource("/{name}.{extension}")
-                .route(web::get().to(index))
-        )
-
+        App::new()
+            .route("/rust.png", web::get().to(png_handler))
+            .route("/rust.webp", web::get().to(webp_handler))
     })
     .bind("127.0.0.1:8080")?
     .run()
