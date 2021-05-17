@@ -1,4 +1,10 @@
 
+use image::io::Reader as ImageReader;
+use image::ImageError;
+use image::ImageOutputFormat;
+use futures::{StreamExt, TryStreamExt};
+use std::io::Write;
+use actix_multipart::Multipart;
 use actix_web::{
     web,
     App,
@@ -7,15 +13,6 @@ use actix_web::{
     Error,
 };
 
-use actix_multipart::Multipart;
-
-use futures::{StreamExt, TryStreamExt};
-use std::io::Write;
-
-
-use image::io::Reader as ImageReader;
-use image::ImageError;
-use image::ImageOutputFormat;
 
 async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
     // Iterating over multipart form data stream
