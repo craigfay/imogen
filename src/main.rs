@@ -2,9 +2,14 @@
 use image::io::Reader as ImageReader;
 use image::ImageError;
 use image::ImageOutputFormat;
+use image::imageops::FilterType;
 use serde::Deserialize;
 use futures::{StreamExt, TryStreamExt};
+use std::io;
+use std::io::prelude::*;
 use std::io::Write;
+use std::fs::File;
+use webp;
 use actix_multipart::Multipart;
 use actix_web::{
     web,
@@ -15,8 +20,20 @@ use actix_web::{
 };
 
 
+#[derive(Deserialize, Debug)]
+struct ImageParams {
+    width: u32,
+    height: u32,
+}
+
+type Bytes = Vec<u8>;
+type ImageServiceResult = Result<Bytes, &'static str>;
+
+
+
+// Respond to a request to upload a file contained in a multipart form stream
 async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
-    // Iterating over multipart form data stream
+    // Iterating over each part of the multipart form
     while let Ok(Some(mut field)) = payload.try_next().await {
         let content_type = field.content_disposition().unwrap();
         let filename = content_type.get_filename().unwrap();
@@ -59,10 +76,37 @@ fn image_as_webp() -> Result<Vec<u8>, ImageError> {
     Ok(buffer)
 }
 
-#[derive(Deserialize, Debug)]
-struct PngRequestInfo {
-    width: u32,
-    height: u32,
+// Given a set of image parameters, read an image from file, maybe apply
+// transformations to it, and return its binary data.
+fn image_bytes(params: ImageParams) -> ImageServiceResult {
+    // Attempting to open a file
+    let mut file = match File::open("rust.webp") {
+        Err(_) => return Result::Err("A file with that name does not exist"),
+        Ok(f) => f,
+    };
+
+    // Reading the contents of the file into a vector of bytes
+    let mut buffer: Vec<u8> = Vec::new();
+    file.read_to_end(&mut buffer);
+
+    // Decoding the bytes as webp
+    let webp_decoder = webp::Decoder::new(&buffer);
+    let webp_image = webp_decoder.decode().unwrap();
+
+    // Re-encoding the bytes as png
+    let dynamic_image = webp_image.to_image();
+
+    // Resizing the image
+    let resized_image = dynamic_image.resize_exact(
+        params.width,
+        params.height,
+        FilterType::Nearest,
+    );
+
+    // Writing the resized image to a new byte vector
+    let mut buffer: Vec<u8> = Vec::new();
+    resized_image.write_to(&mut buffer, ImageOutputFormat::Png).unwrap();
+    Ok(buffer)
 }
 
 // Return the bytes of a static png file 
@@ -75,9 +119,14 @@ fn image_as_png() -> Result<Vec<u8>, ImageError> {
     Ok(buffer)
 }
 
-fn png_handler(info: web::Path<PngRequestInfo>) -> HttpResponse {
-    println!("{:?}", info);
+fn dynamic_handler(params: web::Path<ImageParams>) -> HttpResponse {
+    let buffer = image_bytes(params.into_inner()).unwrap();
+    HttpResponse::Ok()
+        .header("content-type", "image/png")
+        .body(buffer)
+}
 
+fn png_handler() -> HttpResponse {
     let buffer = image_as_png().unwrap();
     HttpResponse::Ok()
         .header("content-type", "image/png")
@@ -95,7 +144,8 @@ fn webp_handler() -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .route("/rust_{width}x{height}.png", web::get().to(png_handler))
+            .route("/rust_{width}x{height}.png", web::get().to(dynamic_handler))
+            .route("/rust.png", web::get().to(png_handler))
             .route("/rust.webp", web::get().to(webp_handler))
             .route("/upload", web::post().to(upload))
     })
