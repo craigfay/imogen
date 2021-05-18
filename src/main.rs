@@ -2,6 +2,7 @@
 use image::io::Reader as ImageReader;
 use image::ImageError;
 use image::ImageOutputFormat;
+use serde::Deserialize;
 use futures::{StreamExt, TryStreamExt};
 use std::io::Write;
 use actix_multipart::Multipart;
@@ -58,6 +59,11 @@ fn image_as_webp() -> Result<Vec<u8>, ImageError> {
     Ok(buffer)
 }
 
+#[derive(Deserialize, Debug)]
+struct PngRequestInfo {
+    width: u32,
+    height: u32,
+}
 
 // Return the bytes of a static png file 
 fn image_as_png() -> Result<Vec<u8>, ImageError> {
@@ -69,7 +75,9 @@ fn image_as_png() -> Result<Vec<u8>, ImageError> {
     Ok(buffer)
 }
 
-fn png_handler() -> HttpResponse {
+fn png_handler(info: web::Path<PngRequestInfo>) -> HttpResponse {
+    println!("{:?}", info);
+
     let buffer = image_as_png().unwrap();
     HttpResponse::Ok()
         .header("content-type", "image/png")
@@ -87,7 +95,7 @@ fn webp_handler() -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .route("/rust.png", web::get().to(png_handler))
+            .route("/rust_{width}x{height}.png", web::get().to(png_handler))
             .route("/rust.webp", web::get().to(webp_handler))
             .route("/upload", web::post().to(upload))
     })
