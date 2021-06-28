@@ -143,7 +143,7 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
 }
 
 
-fn dynamic_handler(params: web::Path<ImageParams>) -> HttpResponse {
+fn serve_image_via_http(params: web::Path<ImageParams>) -> HttpResponse {
     let params = params.into_inner();
     let extension = params.extension.clone();
 
@@ -168,7 +168,7 @@ fn dynamic_handler(params: web::Path<ImageParams>) -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .route("/{filename}_{width}x{height}.{extension}", web::get().to(dynamic_handler))
+            .route("/{filename}_{width}x{height}.{extension}", web::get().to(serve_image_via_http))
             .route("/upload", web::post().to(upload))
     })
     .bind("127.0.0.1:8080")?
