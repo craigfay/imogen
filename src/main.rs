@@ -22,6 +22,7 @@ use actix_web::{
 
 #[derive(Deserialize, Debug)]
 struct ImageParams {
+    filename: String,
     width: u32,
     height: u32,
     extension: String,
@@ -96,7 +97,8 @@ fn image_as_webp() -> Result<Vec<u8>, ImageError> {
 // transformations to it, and return its binary data.
 fn image_bytes(params: ImageParams) -> ImageServiceResult {
     // Attempting to open a file
-    let mut file = match File::open("rust.webp") {
+    let filepath = format!("./uploads/{}.webp", params.filename);
+    let mut file = match File::open(filepath) {
         Err(_) => return Result::Err(ImageServiceFailure::ImageDoesNotExist),
         Ok(f) => f,
     };
@@ -166,7 +168,7 @@ fn dynamic_handler(params: web::Path<ImageParams>) -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .route("/rust_{width}x{height}.{extension}", web::get().to(dynamic_handler))
+            .route("/{filename}_{width}x{height}.{extension}", web::get().to(dynamic_handler))
             .route("/upload", web::post().to(upload))
     })
     .bind("127.0.0.1:8080")?
