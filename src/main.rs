@@ -140,15 +140,6 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
     }
 }
 
-// Return the bytes of a static png file 
-fn image_as_png() -> Result<Vec<u8>, ImageError> {
-    let full_filename = "rust.png";
-    let mut buffer: Vec<u8> = Vec::new();
-    let img = ImageReader::open(full_filename)?.with_guessed_format()?;
-    let decoded = img.decode()?;
-    decoded.write_to(&mut buffer, ImageOutputFormat::Png)?;
-    Ok(buffer)
-}
 
 fn dynamic_handler(params: web::Path<ImageParams>) -> HttpResponse {
     let params = params.into_inner();
@@ -171,27 +162,11 @@ fn dynamic_handler(params: web::Path<ImageParams>) -> HttpResponse {
     }
 }
 
-fn png_handler() -> HttpResponse {
-    let buffer = image_as_png().unwrap();
-    HttpResponse::Ok()
-        .header("content-type", "image/png")
-        .body(buffer)
-}
-
-fn webp_handler() -> HttpResponse {
-    let buffer = image_as_webp().unwrap();
-    HttpResponse::Ok()
-        .header("content-type", "image/webp")
-        .body(buffer)
-}
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
             .route("/rust_{width}x{height}.{ext}", web::get().to(dynamic_handler))
-            .route("/rust.png", web::get().to(png_handler))
-            .route("/rust.webp", web::get().to(webp_handler))
             .route("/upload", web::post().to(upload))
     })
     .bind("127.0.0.1:8080")?
