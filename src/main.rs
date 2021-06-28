@@ -24,7 +24,7 @@ use actix_web::{
 struct ImageParams {
     width: u32,
     height: u32,
-    ext: String,
+    extension: String,
 }
 
 
@@ -121,7 +121,7 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
     let mut buffer: Vec<u8> = Vec::new();
 
     // Re-encoding the image and writing to the buffer
-    match &params.ext[..] {
+    match &params.extension[..] {
         "webp" => {
             let webp_encoder = webp::Encoder::from_image(&resized_image);
             let webp = webp_encoder.encode_lossless();
@@ -143,12 +143,12 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
 
 fn dynamic_handler(params: web::Path<ImageParams>) -> HttpResponse {
     let params = params.into_inner();
-    let ext = params.ext.clone();
+    let extension = params.extension.clone();
 
     match image_bytes(params) {
         Ok(buffer) => {
             HttpResponse::Ok()
-                .header("content-type", format!("image/{}", ext))
+                .header("content-type", format!("image/{}", extension))
                 .body(buffer)
         },
         Err(failure) => match failure {
@@ -166,7 +166,7 @@ fn dynamic_handler(params: web::Path<ImageParams>) -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .route("/rust_{width}x{height}.{ext}", web::get().to(dynamic_handler))
+            .route("/rust_{width}x{height}.{extension}", web::get().to(dynamic_handler))
             .route("/upload", web::post().to(upload))
     })
     .bind("127.0.0.1:8080")?
