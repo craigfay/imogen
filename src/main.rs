@@ -93,15 +93,6 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
     // Decoding the bytes as webp
     let webp_decoder = webp::Decoder::new(&buffer);
     let webp_image = webp_decoder.decode().unwrap();
-
-    match &params.ext[..] {
-        "webp" => {},
-        "png" => {},
-        "jpg" => {},
-        _ => return Result::Err("Unsupported file format"),
-    };
-
-    // Re-encoding the bytes as png
     let dynamic_image = webp_image.to_image();
 
     // Resizing the image
@@ -111,10 +102,27 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
         FilterType::Nearest,
     );
 
-    // Writing the resized image to a new byte vector
+    // Initializing the output bytes
     let mut buffer: Vec<u8> = Vec::new();
-    resized_image.write_to(&mut buffer, ImageOutputFormat::Png).unwrap();
-    Ok(buffer)
+
+    // Re-encoding the image and writing to the buffer
+    match &params.ext[..] {
+        "webp" => {
+            let webp_encoder = webp::Encoder::from_image(&resized_image);
+            let webp = webp_encoder.encode_lossless();
+            for i in 0..webp.len() { buffer.push(webp[i]); }
+            Ok(buffer)
+        },
+        "png" => {
+            resized_image.write_to(&mut buffer, ImageOutputFormat::Png).unwrap();
+            Ok(buffer)
+        },
+        "jpeg" => {
+            resized_image.write_to(&mut buffer, ImageOutputFormat::Jpeg(255)).unwrap();
+            Ok(buffer)
+        },
+        _ => Result::Err("Unsupported file format")
+    }
 }
 
 // Return the bytes of a static png file 
