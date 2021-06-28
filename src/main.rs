@@ -24,6 +24,7 @@ use actix_web::{
 struct ImageParams {
     width: u32,
     height: u32,
+	ext: String,
 }
 
 type Bytes = Vec<u8>;
@@ -93,6 +94,13 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
     let webp_decoder = webp::Decoder::new(&buffer);
     let webp_image = webp_decoder.decode().unwrap();
 
+    match &params.ext[..] {
+        "webp" => {},
+        "png" => {},
+        "jpg" => {},
+        _ => return Result::Err("Unsupported file format"),
+    };
+
     // Re-encoding the bytes as png
     let dynamic_image = webp_image.to_image();
 
@@ -144,7 +152,7 @@ fn webp_handler() -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .route("/rust_{width}x{height}.png", web::get().to(dynamic_handler))
+            .route("/rust_{width}x{height}.{ext}", web::get().to(dynamic_handler))
             .route("/rust.png", web::get().to(png_handler))
             .route("/rust.webp", web::get().to(webp_handler))
             .route("/upload", web::post().to(upload))
