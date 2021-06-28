@@ -24,11 +24,26 @@ use actix_web::{
 struct ImageParams {
     width: u32,
     height: u32,
-	ext: String,
+    ext: String,
+}
+
+
+enum ImageServiceFailure {
+    UnsupportedFormat,
+    ImageDoesNotExist,
+}
+
+impl ImageServiceFailure {
+    fn to_string(&self) -> String {
+        match self {
+            Self::UnsupportedFormat => "Unsupported file format".to_string(),
+            Self::ImageDoesNotExist => "Requested image does not exist".to_string(),
+        }
+    }
 }
 
 type Bytes = Vec<u8>;
-type ImageServiceResult = Result<Bytes, &'static str>;
+type ImageServiceResult = Result<Bytes, ImageServiceFailure>;
 
 
 
@@ -82,7 +97,7 @@ fn image_as_webp() -> Result<Vec<u8>, ImageError> {
 fn image_bytes(params: ImageParams) -> ImageServiceResult {
     // Attempting to open a file
     let mut file = match File::open("rust.webp") {
-        Err(_) => return Result::Err("A file with that name does not exist"),
+        Err(_) => return Result::Err(ImageServiceFailure::ImageDoesNotExist),
         Ok(f) => f,
     };
 
@@ -121,7 +136,7 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
             resized_image.write_to(&mut buffer, ImageOutputFormat::Jpeg(255)).unwrap();
             Ok(buffer)
         },
-        _ => Result::Err("Unsupported file format")
+        _ => Result::Err(ImageServiceFailure::UnsupportedFormat)
     }
 }
 
@@ -136,10 +151,24 @@ fn image_as_png() -> Result<Vec<u8>, ImageError> {
 }
 
 fn dynamic_handler(params: web::Path<ImageParams>) -> HttpResponse {
-    let buffer = image_bytes(params.into_inner()).unwrap();
-    HttpResponse::Ok()
-        .header("content-type", "image/png")
-        .body(buffer)
+    let params = params.into_inner();
+    let ext = params.ext.clone();
+
+    match image_bytes(params) {
+        Ok(buffer) => {
+            HttpResponse::Ok()
+                .header("content-type", format!("image/{}", ext))
+                .body(buffer)
+        },
+        Err(failure) => match failure {
+            ImageServiceFailure::ImageDoesNotExist => {
+                HttpResponse::NotFound().body(failure.to_string())
+            }
+            ImageServiceFailure::UnsupportedFormat => {
+                HttpResponse::BadRequest().body(failure.to_string())
+            }
+        }
+    }
 }
 
 fn png_handler() -> HttpResponse {
