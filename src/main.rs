@@ -15,18 +15,13 @@ use actix_web::{
     web,
     App,
     HttpResponse,
+    HttpRequest,
     HttpServer,
     Error,
 };
 
 
-#[derive(Deserialize, Debug)]
-struct ImageParams {
-    filename: String,
-    width: u32,
-    height: u32,
-    extension: String,
-}
+
 
 
 enum ImageServiceFailure {
@@ -95,9 +90,9 @@ fn image_as_webp() -> Result<Vec<u8>, ImageError> {
 
 // Given a set of image parameters, read an image from file, maybe apply
 // transformations to it, and return its binary data.
-fn image_bytes(params: ImageParams) -> ImageServiceResult {
+fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -> ImageServiceResult {
     // Attempting to open a file
-    let filepath = format!("./uploads/{}.webp", params.filename);
+    let filepath = format!("./uploads/{}.webp", required.filename);
     let mut file = match File::open(filepath) {
         Err(_) => return Result::Err(ImageServiceFailure::ImageDoesNotExist),
         Ok(f) => f,
@@ -114,8 +109,8 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
 
     // Resizing the image
     let resized_image = dynamic_image.resize_exact(
-        params.width,
-        params.height,
+        required.width,
+        required.height,
         FilterType::Nearest,
     );
 
@@ -123,7 +118,7 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
     let mut buffer: Vec<u8> = Vec::new();
 
     // Re-encoding the image and writing to the buffer
-    match &params.extension[..] {
+    match &required.extension[..] {
         "webp" => {
             let webp_encoder = webp::Encoder::from_image(&resized_image);
             let webp = webp_encoder.encode_lossless();
@@ -142,15 +137,27 @@ fn image_bytes(params: ImageParams) -> ImageServiceResult {
     }
 }
 
+#[derive(Deserialize, Debug)]
+struct RequiredImageParams {
+    filename: String,
+    width: u32,
+    height: u32,
+    extension: String,
+}
 
-fn serve_image_via_http(params: web::Path<ImageParams>) -> HttpResponse {
-    let params = params.into_inner();
-    let extension = params.extension.clone();
+#[derive(Deserialize, Debug)]
+struct OptionalImageParams {
+    sampling: Option<String>,
+}
 
-    match image_bytes(params) {
+fn serve_image_via_http(required: web::Path<RequiredImageParams>, optional: web::Query<OptionalImageParams>) -> HttpResponse {
+    let required = required.into_inner();
+    let optional = optional.into_inner();
+
+    match image_bytes(&required, &optional) {
         Ok(buffer) => {
             HttpResponse::Ok()
-                .header("content-type", format!("image/{}", extension))
+                .header("content-type", format!("image/{}", required.extension))
                 .body(buffer)
         },
         Err(failure) => match failure {
