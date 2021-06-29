@@ -3,6 +3,7 @@ use image::io::Reader as ImageReader;
 use image::ImageError;
 use image::ImageOutputFormat;
 use image::imageops::FilterType;
+use image::GenericImageView;
 use serde::Deserialize;
 use futures::{StreamExt, TryStreamExt};
 use std::io;
@@ -107,27 +108,24 @@ fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -
     let webp_image = webp_decoder.decode().unwrap();
     let mut dynamic_image = webp_image.to_image();
 
-    // Maybe resizing the image
-    match (optional.w, optional.h) {
-        (Some(width), Some(height)) => {
+    // Choosing resize dimensions
+    let new_width = optional.w.unwrap_or(dynamic_image.width());
+    let new_height = optional.h.unwrap_or(dynamic_image.height());
 
-            // Choosing sampling filter to use when resizing
-            let filter = match &optional.sampling {
-                None => FilterType::Nearest,
-                Some(filter_name) => match &filter_name[..] {
-                    "triangle" => FilterType::Triangle,
-                    "catmullrom" => FilterType::CatmullRom,
-                    "gaussian" => FilterType::Gaussian,
-                    "lanczos3" => FilterType::Lanczos3,
-                    _ => FilterType::Nearest,
-                }
-            };
+    // Choosing sampling method filter to use for resizing
+    let filter = match &optional.sampling {
+        None => FilterType::Nearest,
+        Some(filter_name) => match &filter_name[..] {
+            "triangle" => FilterType::Triangle,
+            "catmullrom" => FilterType::CatmullRom,
+            "gaussian" => FilterType::Gaussian,
+            "lanczos3" => FilterType::Lanczos3,
+            _ => FilterType::Nearest,
+        }
+    };
 
-            // Resizing the image
-            dynamic_image = dynamic_image.resize_exact(width, height, filter);
-        }, 
-        _ => {},
-    }
+    // Resizing the image
+    dynamic_image = dynamic_image.resize(new_width, new_height, filter);
 
     // Initializing the output bytes
     let mut buffer: Vec<u8> = Vec::new();
