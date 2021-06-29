@@ -109,8 +109,10 @@ fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -
     let mut dynamic_image = webp_image.to_image();
 
     // Choosing resize dimensions
-    let new_width = optional.w.unwrap_or(dynamic_image.width());
-    let new_height = optional.h.unwrap_or(dynamic_image.height());
+    let width = dynamic_image.width();
+    let height = dynamic_image.height();
+    let new_width = optional.w.unwrap_or(width);
+    let new_height = optional.h.unwrap_or(height);
 
     // Choosing sampling method filter to use for resizing
     let filter = match &optional.sampling {
@@ -125,7 +127,9 @@ fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -
     };
 
     // Resizing the image
-    dynamic_image = dynamic_image.resize(new_width, new_height, filter);
+    if height != new_height || width != new_width {
+        dynamic_image = dynamic_image.resize(new_width, new_height, filter);
+    }
 
     // Initializing the output bytes
     let mut buffer: Vec<u8> = Vec::new();
