@@ -128,7 +128,10 @@ fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -
 
     // Resizing the image
     if height != new_height || width != new_width {
-        dynamic_image = dynamic_image.resize(new_width, new_height, filter);
+        dynamic_image = match &optional.preserve_aspect_ratio.unwrap_or(true) {
+            false => dynamic_image.resize_exact(new_width, new_height, filter),
+            true => dynamic_image.resize(new_width, new_height, filter),
+        }
     }
 
     // Initializing the output bytes
@@ -162,6 +165,7 @@ struct RequiredImageParams {
 
 #[derive(Deserialize, Debug)]
 struct OptionalImageParams {
+    preserve_aspect_ratio: Option<bool>,
     sampling: Option<String>,
     w: Option<u32>,
     h: Option<u32>,
