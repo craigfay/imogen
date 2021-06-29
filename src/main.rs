@@ -105,25 +105,29 @@ fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -
     // Decoding the bytes as webp
     let webp_decoder = webp::Decoder::new(&buffer);
     let webp_image = webp_decoder.decode().unwrap();
-    let dynamic_image = webp_image.to_image();
+    let mut dynamic_image = webp_image.to_image();
 
-    let filter_type = match &optional.sampling {
-        None => FilterType::Nearest,
-        Some(filter_name) => match &filter_name[..] {
-            "triangle" => FilterType::Triangle,
-            "catmullrom" => FilterType::CatmullRom,
-            "gaussian" => FilterType::Gaussian,
-            "lanczos3" => FilterType::Lanczos3,
-            _ => FilterType::Nearest,
-        }
-    };
+    // Maybe resizing the image
+    match (optional.w, optional.h) {
+        (Some(width), Some(height)) => {
 
-    // Resizing the image
-    let resized_image = dynamic_image.resize_exact(
-        required.width,
-        required.height,
-        filter_type,
-    );
+            // Choosing sampling filter to use when resizing
+            let filter = match &optional.sampling {
+                None => FilterType::Nearest,
+                Some(filter_name) => match &filter_name[..] {
+                    "triangle" => FilterType::Triangle,
+                    "catmullrom" => FilterType::CatmullRom,
+                    "gaussian" => FilterType::Gaussian,
+                    "lanczos3" => FilterType::Lanczos3,
+                    _ => FilterType::Nearest,
+                }
+            };
+
+            // Resizing the image
+            dynamic_image = dynamic_image.resize_exact(width, height, filter);
+        }, 
+        _ => {},
+    }
 
     // Initializing the output bytes
     let mut buffer: Vec<u8> = Vec::new();
@@ -131,17 +135,17 @@ fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -
     // Re-encoding the image and writing to the buffer
     match &required.extension[..] {
         "webp" => {
-            let webp_encoder = webp::Encoder::from_image(&resized_image);
+            let webp_encoder = webp::Encoder::from_image(&dynamic_image);
             let webp = webp_encoder.encode_lossless();
             for i in 0..webp.len() { buffer.push(webp[i]); }
             Ok(buffer)
         },
         "png" => {
-            resized_image.write_to(&mut buffer, ImageOutputFormat::Png).unwrap();
+            dynamic_image.write_to(&mut buffer, ImageOutputFormat::Png).unwrap();
             Ok(buffer)
         },
         "jpeg" => {
-            resized_image.write_to(&mut buffer, ImageOutputFormat::Jpeg(255)).unwrap();
+            dynamic_image.write_to(&mut buffer, ImageOutputFormat::Jpeg(255)).unwrap();
             Ok(buffer)
         },
         _ => Result::Err(ImageServiceFailure::UnsupportedFormat)
@@ -151,14 +155,14 @@ fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -
 #[derive(Deserialize, Debug)]
 struct RequiredImageParams {
     filename: String,
-    width: u32,
-    height: u32,
     extension: String,
 }
 
 #[derive(Deserialize, Debug)]
 struct OptionalImageParams {
     sampling: Option<String>,
+    w: Option<u32>,
+    h: Option<u32>,
 }
 
 fn serve_image_via_http(required: web::Path<RequiredImageParams>, optional: web::Query<OptionalImageParams>) -> HttpResponse {
@@ -186,7 +190,7 @@ fn serve_image_via_http(required: web::Path<RequiredImageParams>, optional: web:
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .route("/{filename}_{width}x{height}.{extension}", web::get().to(serve_image_via_http))
+            .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
             .route("/upload", web::post().to(upload))
     })
     .bind("127.0.0.1:8080")?
