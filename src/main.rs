@@ -107,11 +107,22 @@ fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -
     let webp_image = webp_decoder.decode().unwrap();
     let dynamic_image = webp_image.to_image();
 
+    let filter_type = match &optional.sampling {
+        None => FilterType::Nearest,
+        Some(filter_name) => match &filter_name[..] {
+            "triangle" => FilterType::Triangle,
+            "catmullrom" => FilterType::CatmullRom,
+            "gaussian" => FilterType::Gaussian,
+            "lanczos3" => FilterType::Lanczos3,
+            _ => FilterType::Nearest,
+        }
+    };
+
     // Resizing the image
     let resized_image = dynamic_image.resize_exact(
         required.width,
         required.height,
-        FilterType::Nearest,
+        filter_type,
     );
 
     // Initializing the output bytes
