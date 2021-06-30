@@ -44,6 +44,13 @@ type Bytes = Vec<u8>;
 type ImageServiceResult = Result<Bytes, ImageServiceFailure>;
 
 
+// "example.png" -> "example"
+fn strip_extension(filename: &str) -> String {
+    let mut parts: Vec<&str> = filename.split(".").collect();
+    parts.pop();
+    parts.join(".")
+}
+
 
 // Respond to a request to upload a file contained in a multipart form stream
 async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
@@ -51,7 +58,8 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
     while let Ok(Some(mut field)) = payload.try_next().await {
         let content_type = field.content_disposition().unwrap();
         let filename = content_type.get_filename().unwrap();
-        let filepath = format!("./uploads/{}.webp", sanitize_filename::sanitize(&filename));
+        let filename = strip_extension(&filename);
+        let filepath = format!("./uploads/{}.webp", filename);
 
 
         // Reading file data
