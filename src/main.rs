@@ -7,6 +7,7 @@ use image::GenericImageView;
 use serde::Deserialize;
 use futures::{StreamExt, TryStreamExt};
 use std::io;
+use std::io::Cursor;
 use std::io::prelude::*;
 use std::io::Write;
 use std::fs::File;
@@ -50,23 +51,39 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
     while let Ok(Some(mut field)) = payload.try_next().await {
         let content_type = field.content_disposition().unwrap();
         let filename = content_type.get_filename().unwrap();
-        let filepath = format!("./uploads/{}", sanitize_filename::sanitize(&filename));
+        let filepath = format!("./uploads/{}.webp", sanitize_filename::sanitize(&filename));
+
+
+        // Reading file data
+        let mut incoming_data: Vec<u8> = Vec::new();
+        while let Some(chunk) = field.next().await {
+            incoming_data.extend(chunk.unwrap());
+        }
+
+        let mut reader = ImageReader::new(Cursor::new(incoming_data))
+            .with_guessed_format()
+            .expect("fail");
+
+        let dynamic_image = reader.decode().unwrap();
+
+
+        // Re-encoding as Webp
+        let mut data_to_store: Vec<u8> = Vec::new();
+        let webp_encoder = webp::Encoder::from_image(&dynamic_image);
+        let webp = webp_encoder.encode_lossless();
+        for i in 0..webp.len() { data_to_store.push(webp[i]); }
 
         // Creating a file on the host system. File::create is a blocking
         // operation, using a threadpool for this operation would improve
         // performance and scalability.
+
         let mut f = web::block(|| std::fs::File::create(filepath))
             .await
             .unwrap();
 
-        while let Some(chunk) = field.next().await {
-            let data = chunk.unwrap();
-
-            // Writing bytes to the newly created file. Again, it would be
-            // better to use a threadpool
-            f = web::block(move || f.write_all(&data).map(|_| f)).await?;
-        }
+        f = web::block(move || f.write_all(&data_to_store).map(|_| f)).await?;
     }
+
     Ok(HttpResponse::Ok().into())
 }
 
