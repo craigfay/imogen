@@ -22,10 +22,6 @@ use actix_web::{
     Error,
 };
 
-
-
-
-
 enum ImageServiceFailure {
     UnsupportedFormat,
     ImageDoesNotExist,
@@ -51,9 +47,22 @@ fn strip_extension(filename: &str) -> String {
     parts.join(".")
 }
 
+struct UploadResult {
+    pub filename: String,
+    pub errors: Vec<String>,
+}
+
+impl UploadResult {
+    pub fn add_error(&mut self, message: &str) {
+        self.errors.push(message.to_string());
+    }
+}
 
 // Respond to a request to upload a file contained in a multipart form stream
 async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
+
+    let mut results: Vec<UploadResult> = vec![];
+
     // Iterating over each part of the multipart form
     while let Ok(Some(mut field)) = payload.try_next().await {
         let content_type = field.content_disposition().unwrap();
@@ -61,15 +70,20 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         let filename = strip_extension(&filename);
         let filepath = format!("./uploads/{}.webp", filename);
 
+        let mut result = UploadResult { filename, errors: vec![] };
 
         // Reading file data
         let mut incoming_data: Vec<u8> = Vec::new();
         while let Some(chunk) = field.next().await {
-            incoming_data.extend(chunk.unwrap());
+            match chunk {
+                Ok(data) => incoming_data.extend(data),
+                Err(_) => result.add_error("File failed to re-assemble"),
+            };
         }
 
         let mut reader = ImageReader::new(Cursor::new(incoming_data))
             .with_guessed_format()
+
             .expect("fail");
 
         let dynamic_image = reader.decode().unwrap();
