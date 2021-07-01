@@ -51,11 +51,15 @@ fn strip_extension(filename: &str) -> String {
 
 #[derive(Serialize)]
 struct UploadResult {
-    pub filename: String,
+    pub filename: Option<String>,
     pub errors: Vec<String>,
 }
 
 impl UploadResult {
+    pub fn new() -> Self {
+        Self { filename: None, errors: vec![] }
+    }
+
     pub fn with_error(mut self, message: &str) -> Self {
         self.errors.push(message.to_string());
         self
@@ -64,17 +68,27 @@ impl UploadResult {
 
 // Respond to a request to upload a file contained in a multipart form stream
 async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
-
     let mut results: Vec<UploadResult> = vec![];
 
     // Iterating over each part of the multipart form
     'form_parts: while let Ok(Some(mut field)) = payload.try_next().await {
-        let content_type = field.content_disposition().unwrap();
+        let mut result = UploadResult::new();
+
+        let content_type = match field.content_disposition() {
+            Some(result) => result,
+            None => {
+                let message = "The multi-part form was not sent correctly: \
+                Content-Disposition was not present";
+                results.push(result.with_error(message));
+                continue 'form_parts;
+            }
+        };
+
+        // Determining filename
         let filename = content_type.get_filename().unwrap().to_string();
         let clean_filename = strip_extension(&filename);
         let filepath = format!("./uploads/{}.webp", clean_filename);
-
-        let mut result = UploadResult { filename, errors: vec![] };
+        result.filename = Some(filename);
 
         // Reading file data
         let mut incoming_data: Vec<u8> = Vec::new();
