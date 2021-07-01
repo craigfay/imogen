@@ -77,7 +77,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         let content_type = match field.content_disposition() {
             Some(result) => result,
             None => {
-                let message = "The multi-part form was not sent correctly: \
+                let message = "The multi-part form was improperly formatted: \
                 Content-Disposition was not present";
                 results.push(result.with_error(message));
                 continue 'form_parts;
@@ -85,10 +85,20 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         };
 
         // Determining filename
-        let filename = content_type.get_filename().unwrap().to_string();
+        let filename = match content_type.get_filename() {
+            Some(filename) => filename,
+            None => {
+                let message = "The multi-part form was improperly formatted: \
+                A filename was not provided";
+                results.push(result.with_error(message));
+                continue 'form_parts;
+            }
+        };
+
+        let filename = filename.to_string();
         let clean_filename = strip_extension(&filename);
         let filepath = format!("./uploads/{}.webp", clean_filename);
-        result.filename = Some(filename);
+        if filename != "" { result.filename = Some(filename); }
 
         // Reading file data
         let mut incoming_data: Vec<u8> = Vec::new();
@@ -100,6 +110,11 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
                     continue 'form_parts;
                 }
             };
+        }
+
+        if incoming_data.len() == 0 {
+            results.push(result.with_error("No file data was provided"));
+            continue 'form_parts;
         }
 
         // Constructing Image Reader
