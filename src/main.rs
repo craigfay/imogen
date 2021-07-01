@@ -4,7 +4,7 @@ use image::ImageError;
 use image::ImageOutputFormat;
 use image::imageops::FilterType;
 use image::GenericImageView;
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
 use futures::{StreamExt, TryStreamExt};
 use std::io;
 use std::io::Cursor;
@@ -47,6 +47,7 @@ fn strip_extension(filename: &str) -> String {
     parts.join(".")
 }
 
+#[derive(Serialize)]
 struct UploadResult {
     pub filename: String,
     pub errors: Vec<String>,
@@ -64,7 +65,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
     let mut results: Vec<UploadResult> = vec![];
 
     // Iterating over each part of the multipart form
-    while let Ok(Some(mut field)) = payload.try_next().await {
+    'form_parts: while let Ok(Some(mut field)) = payload.try_next().await {
         let content_type = field.content_disposition().unwrap();
         let filename = content_type.get_filename().unwrap();
         let filename = strip_extension(&filename);
@@ -77,12 +78,17 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         while let Some(chunk) = field.next().await {
             match chunk {
                 Ok(data) => incoming_data.extend(data),
-                Err(_) => result.add_error("File failed to re-assemble"),
+                Err(_) => {
+                    result.add_error("File failed to re-assemble");
+                    results.push(result);
+                    continue 'form_parts;
+                }
             };
         }
 
         let mut reader = ImageReader::new(Cursor::new(incoming_data))
             .with_guessed_format()
+
 
             .expect("fail");
 
