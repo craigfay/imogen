@@ -54,8 +54,9 @@ struct UploadResult {
 }
 
 impl UploadResult {
-    pub fn add_error(&mut self, message: &str) {
+    pub fn with_error(mut self, message: &str) -> Self {
         self.errors.push(message.to_string());
+        self
     }
 }
 
@@ -79,8 +80,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
             match chunk {
                 Ok(data) => incoming_data.extend(data),
                 Err(_) => {
-                    result.add_error("File failed to re-assemble");
-                    results.push(result);
+                    results.push(result.with_error("File failed to re-assemble"));
                     continue 'form_parts;
                 }
             };
