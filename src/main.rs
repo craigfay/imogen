@@ -4,6 +4,7 @@ use image::ImageError;
 use image::ImageOutputFormat;
 use image::imageops::FilterType;
 use image::GenericImageView;
+use image::ImageFormat;
 use serde::{Serialize, Deserialize};
 use futures::{StreamExt, TryStreamExt};
 use std::io;
@@ -86,6 +87,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
             };
         }
 
+        // Constructing Image Reader
         let cursor = Cursor::new(incoming_data);
         let mut reader = match ImageReader::new(cursor).with_guessed_format() {
             Ok(result) => result, 
@@ -95,6 +97,20 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
             }
         };
 
+        // Restricting file formats
+        match reader.format() {
+            Some(ImageFormat::Png) => {},
+            Some(ImageFormat::Jpeg) => {},
+            Some(ImageFormat::WebP) => {},
+            _ => {
+                let message = "Unsupported image format. Try converting to \
+                png, jpeg, or webp before uploading.";
+                results.push(result.with_error(message));
+                continue 'form_parts;
+            }
+        }
+
+        // Decoding image data
         let dynamic_image = match reader.decode() {
             Ok(result) => result,
             Err(_) => {
@@ -113,6 +129,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         // operation, using a threadpool for this operation would improve
         // performance and scalability.
 
+        // Creating new file
         let mut f = match web::block(|| File::create(filepath)).await {
             Ok(result) => result,
             Err(_) => {
@@ -121,6 +138,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
             }
         };
 
+        // Writing contents to file
         f = match web::block(move || f.write_all(&data_to_store).map(|_| f)).await {
             Ok(result) => result,
             Err(_) => {
@@ -128,7 +146,6 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
                 continue 'form_parts;
             }
         };
-
     }
 
     Ok(HttpResponse::Ok().into())
