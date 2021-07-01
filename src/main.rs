@@ -6,6 +6,7 @@ use image::imageops::FilterType;
 use image::GenericImageView;
 use image::ImageFormat;
 use serde::{Serialize, Deserialize};
+use serde_json;
 use futures::{StreamExt, TryStreamExt};
 use std::io;
 use std::io::Cursor;
@@ -69,9 +70,9 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
     // Iterating over each part of the multipart form
     'form_parts: while let Ok(Some(mut field)) = payload.try_next().await {
         let content_type = field.content_disposition().unwrap();
-        let filename = content_type.get_filename().unwrap();
-        let filename = strip_extension(&filename);
-        let filepath = format!("./uploads/{}.webp", filename);
+        let filename = content_type.get_filename().unwrap().to_string();
+        let clean_filename = strip_extension(&filename);
+        let filepath = format!("./uploads/{}.webp", clean_filename);
 
         let mut result = UploadResult { filename, errors: vec![] };
 
@@ -103,8 +104,8 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
             Some(ImageFormat::Jpeg) => {},
             Some(ImageFormat::WebP) => {},
             _ => {
-                let message = "Unsupported image format. Try converting to \
-                png, jpeg, or webp before uploading.";
+                let message = "Unsupported file format. Try converting to \
+                .png, .jpeg, or .webp before uploading.";
                 results.push(result.with_error(message));
                 continue 'form_parts;
             }
@@ -146,9 +147,17 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
                 continue 'form_parts;
             }
         };
+
+        // Success!
+        results.push(result);
+
     }
 
-    Ok(HttpResponse::Ok().into())
+    Ok(
+        HttpResponse::Ok()
+            .header("content-type", "application/json")
+            .body(serde_json::to_string(&results).unwrap())
+    )
 }
 
 
