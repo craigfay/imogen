@@ -86,14 +86,22 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
             };
         }
 
-        let mut reader = ImageReader::new(Cursor::new(incoming_data))
-            .with_guessed_format()
+        let cursor = Cursor::new(incoming_data);
+        let mut reader = match ImageReader::new(cursor).with_guessed_format() {
+            Ok(result) => result, 
+            Err(_) => {
+                results.push(result.with_error("File was un-readable"));
+                continue 'form_parts;
+            }
+        };
 
-
-            .expect("fail");
-
-        let dynamic_image = reader.decode().unwrap();
-
+        let dynamic_image = match reader.decode() {
+            Ok(result) => result,
+            Err(_) => {
+                results.push(result.with_error("File could not be decoded"));
+                continue 'form_parts;
+            }
+        };
 
         // Re-encoding as Webp
         let mut data_to_store: Vec<u8> = Vec::new();
@@ -105,11 +113,22 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         // operation, using a threadpool for this operation would improve
         // performance and scalability.
 
-        let mut f = web::block(|| std::fs::File::create(filepath))
-            .await
-            .unwrap();
+        let mut f = match web::block(|| File::create(filepath)).await {
+            Ok(result) => result,
+            Err(_) => {
+                results.push(result.with_error("New file could not be created"));
+                continue 'form_parts;
+            }
+        };
 
-        f = web::block(move || f.write_all(&data_to_store).map(|_| f)).await?;
+        f = match web::block(move || f.write_all(&data_to_store).map(|_| f)).await {
+            Ok(result) => result,
+            Err(_) => {
+                results.push(result.with_error("File contents could not be saved"));
+                continue 'form_parts;
+            }
+        };
+
     }
 
     Ok(HttpResponse::Ok().into())
