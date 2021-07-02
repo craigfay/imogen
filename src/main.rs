@@ -112,7 +112,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         }
 
         // Reading file data
-        let mut incoming_data: Vec<u8> = Vec::new();
+        let mut incoming_data: Bytes = Vec::new();
         while let Some(chunk) = field.next().await {
             match chunk {
                 Ok(data) => incoming_data.extend(data),
@@ -164,7 +164,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         };
 
         // Re-encoding uploaded image as WebP
-        let mut data_to_store: Vec<u8> = Vec::new();
+        let mut data_to_store: Bytes = Vec::new();
         let webp_encoder = webp::Encoder::from_image(&dynamic_image);
         let webp = webp_encoder.encode_lossless();
         for i in 0..webp.len() { data_to_store.push(webp[i]); }
@@ -202,9 +202,9 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
 
 
 // Return the bytes of a static png file after converting to webp format.
-fn image_as_webp() -> Result<Vec<u8>, ImageError> {
+fn image_as_webp() -> Result<Bytes, ImageError> {
     let full_filename = "rust.png";
-    let mut buffer: Vec<u8> = Vec::new();
+    let mut buffer: Bytes = Vec::new();
 
     let img = ImageReader::open(full_filename)?.with_guessed_format()?;
     let decoded = img.decode()?;
@@ -230,7 +230,7 @@ fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -
     };
 
     // Reading the contents of the file into a vector of bytes
-    let mut buffer: Vec<u8> = Vec::new();
+    let mut buffer: Bytes = Vec::new();
     file.read_to_end(&mut buffer);
 
     // Decoding the bytes as webp
@@ -265,7 +265,7 @@ fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -
     }
 
     // Initializing the output bytes
-    let mut buffer: Vec<u8> = Vec::new();
+    let mut buffer: Bytes = Vec::new();
 
     // Re-encoding the image and writing to the buffer
     match &required.extension[..] {
