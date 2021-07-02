@@ -1,20 +1,22 @@
-
+use std::fs::File;
+use std::path::Path;
 use image::io::Reader as ImageReader;
-use image::ImageError;
-use image::ImageOutputFormat;
 use image::imageops::FilterType;
-use image::GenericImageView;
-use image::ImageFormat;
+use image::{
+    ImageError,
+    ImageOutputFormat,
+    GenericImageView,
+    ImageFormat,
+};
+use webp;
 use serde::{Serialize, Deserialize};
 use serde_json;
 use futures::{StreamExt, TryStreamExt};
-use std::io;
-use std::io::Cursor;
-use std::io::prelude::*;
-use std::io::Write;
-use std::fs::File;
-use std::path::Path;
-use webp;
+use std::io::{
+    Cursor,
+    Write,
+    Read,
+};
 use actix_multipart::Multipart;
 use actix_web::{
     web,
@@ -24,6 +26,7 @@ use actix_web::{
     HttpServer,
     Error,
 };
+
 
 enum ImageServiceFailure {
     UnsupportedFormat,
