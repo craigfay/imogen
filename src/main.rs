@@ -101,6 +101,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         let filepath = format!("./uploads/{}.webp", clean_filename);
         if filename != "" { result.filename = Some(filename); }
 
+        // Preventing duplicate filenames
         if Path::new(&filepath).exists() {
             let message = "Another file with this name already exists.";
             results.push(result.with_error(message));
@@ -120,6 +121,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
             };
         }
 
+        // Preventing empty file uploads
         if incoming_data.len() == 0 {
             results.push(result.with_error("No file data was provided."));
             continue 'form_parts;
@@ -158,12 +160,11 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
             }
         };
 
-        // Re-encoding as Webp
+        // Re-encoding uploaded image as WebP
         let mut data_to_store: Vec<u8> = Vec::new();
         let webp_encoder = webp::Encoder::from_image(&dynamic_image);
         let webp = webp_encoder.encode_lossless();
         for i in 0..webp.len() { data_to_store.push(webp[i]); }
-
 
         // Creating new file on a new threadpool
         let mut f = match web::block(|| File::create(filepath)).await {
