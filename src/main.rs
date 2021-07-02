@@ -13,6 +13,7 @@ use std::io::Cursor;
 use std::io::prelude::*;
 use std::io::Write;
 use std::fs::File;
+use std::path::Path;
 use webp;
 use actix_multipart::Multipart;
 use actix_web::{
@@ -100,29 +101,36 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         let filepath = format!("./uploads/{}.webp", clean_filename);
         if filename != "" { result.filename = Some(filename); }
 
+        if Path::new(&filepath).exists() {
+            let message = "Another file with this name already exists.";
+            results.push(result.with_error(message));
+            continue 'form_parts;
+        }
+
         // Reading file data
         let mut incoming_data: Vec<u8> = Vec::new();
         while let Some(chunk) = field.next().await {
             match chunk {
                 Ok(data) => incoming_data.extend(data),
                 Err(_) => {
-                    results.push(result.with_error("File failed to re-assemble"));
+                    let message = "File failed to re-assemble.";
+                    results.push(result.with_error(message));
                     continue 'form_parts;
                 }
             };
         }
 
         if incoming_data.len() == 0 {
-            results.push(result.with_error("No file data was provided"));
+            results.push(result.with_error("No file data was provided."));
             continue 'form_parts;
         }
 
         // Constructing Image Reader
         let cursor = Cursor::new(incoming_data);
-        let mut reader = match ImageReader::new(cursor).with_guessed_format() {
+        let reader = match ImageReader::new(cursor).with_guessed_format() {
             Ok(result) => result, 
             Err(_) => {
-                results.push(result.with_error("File was un-readable"));
+                results.push(result.with_error("File was un-readable."));
                 continue 'form_parts;
             }
         };
@@ -144,7 +152,8 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         let dynamic_image = match reader.decode() {
             Ok(result) => result,
             Err(_) => {
-                results.push(result.with_error("File could not be decoded"));
+                let message = "File data could not be decoded.";
+                results.push(result.with_error(message));
                 continue 'form_parts;
             }
         };
@@ -155,31 +164,29 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
         let webp = webp_encoder.encode_lossless();
         for i in 0..webp.len() { data_to_store.push(webp[i]); }
 
-        // Creating a file on the host system. File::create is a blocking
-        // operation, using a threadpool for this operation would improve
-        // performance and scalability.
 
-        // Creating new file
+        // Creating new file on a new threadpool
         let mut f = match web::block(|| File::create(filepath)).await {
             Ok(result) => result,
             Err(_) => {
-                results.push(result.with_error("New file could not be created"));
+                let message = "New file could not be created.";
+                results.push(result.with_error(message));
                 continue 'form_parts;
             }
         };
 
-        // Writing contents to file
-        f = match web::block(move || f.write_all(&data_to_store).map(|_| f)).await {
+        // Writing contents to file on a new threadpool
+        match web::block(move || f.write_all(&data_to_store).map(|_| f)).await {
             Ok(result) => result,
             Err(_) => {
-                results.push(result.with_error("File contents could not be saved"));
+                let message = "File contents could not be saved";
+                results.push(result.with_error(message));
                 continue 'form_parts;
             }
         };
 
         // Success!
         results.push(result);
-
     }
 
     Ok(
