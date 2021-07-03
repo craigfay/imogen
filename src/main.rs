@@ -221,7 +221,10 @@ fn image_as_webp() -> Result<Bytes, ImageError> {
 
 // Given a set of image parameters, read an image from file, maybe apply
 // transformations to it, and return its binary data.
-fn image_bytes(required: &RequiredImageParams, optional: &OptionalImageParams) -> ImageServiceResult {
+fn image_bytes(
+    required: &RequiredImageParams,
+    optional: &OptionalImageParams
+) -> ImageServiceResult {
     // Attempting to open a file
     let filepath = format!("./uploads/{}.webp", required.filename);
     let mut file = match File::open(filepath) {
@@ -301,7 +304,10 @@ struct OptionalImageParams {
     h: Option<u32>,
 }
 
-fn serve_image_via_http(required: web::Path<RequiredImageParams>, optional: web::Query<OptionalImageParams>) -> HttpResponse {
+fn serve_image_via_http(
+    required: web::Path<RequiredImageParams>,
+    optional: web::Query<OptionalImageParams>
+) -> HttpResponse {
     let required = required.into_inner();
     let optional = optional.into_inner();
 
@@ -323,37 +329,25 @@ fn serve_image_via_http(required: web::Path<RequiredImageParams>, optional: web:
 }
 
 
-
-struct ImageServer {
-    upload_to_dir: String,
-    upload_url: String,
-    port: Option<u64>,
-}
+pub struct ImageServer;
 
 impl ImageServer {
-    pub async fn listen(&mut self, port: u64) -> std::io::Result<()> {
-        self.port = Some(port);
-        HttpServer::new(|| {
-            App::new()
-                .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
-                .route("/upload", web::post().to(upload))
-        })
-        .bind(format!("127.0.0.1:{}", port))
-        .unwrap()
-        .run()
-        .await
+    pub fn listen(port: u64) {
+        actix_web::rt::System::new("server")
+            .block_on(async move {
+                HttpServer::new(|| {
+                    App::new()
+                        .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
+                        .route("/upload", web::post().to(upload))
+                })
+                .bind(format!("127.0.0.1:{}", port))
+                .expect(&format!("Failed to bind to port {}", port))
+                .run()
+                .await
+            });
     }
 }
 
 fn main() {
-    let mut server = ImageServer {
-        upload_to_dir: "./uploads".to_string(),
-        upload_url: "/uploads".to_string(),
-        port: None,
-    };
-
-    actix_web::rt::System::new("server")
-        .block_on(async move {
-            server.listen(8080).await;
-        });
+    ImageServer::listen(8080);
 }
