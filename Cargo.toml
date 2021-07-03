@@ -1,11 +1,11 @@
 [package]
-name = "image_resize_server"
-version = "0.1.0"
+name = "imogene"
+version = "1.0.0"
 authors = ["craig fay <craigfay1@gmail.com>"]
 edition = "2018"
 
 [lib]
-name = "lib"
+name = "imogen"
 
 [dependencies]
 actix-web = "3"
