@@ -322,14 +322,36 @@ fn serve_image_via_http(required: web::Path<RequiredImageParams>, optional: web:
     }
 }
 
+
+
+struct ImageServer {
+    upload_to_dir: String,
+    upload_url: String,
+    port: Option<u64>,
+}
+
+impl ImageServer {
+    pub async fn listen(&mut self, port: u64) -> std::io::Result<()> {
+        self.port = Some(port);
+        HttpServer::new(|| {
+            App::new()
+                .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
+                .route("/upload", web::post().to(upload))
+        })
+        .bind(format!("127.0.0.1:{}", port))
+        .unwrap()
+        .run()
+        .await
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
-        App::new()
-            .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
-            .route("/upload", web::post().to(upload))
-    })
-    .bind("127.0.0.1:8080")?
-    .run()
-    .await
+    let mut server = ImageServer {
+        upload_to_dir: "./uploads".to_string(),
+        upload_url: "/uploads".to_string(),
+        port: None,
+    };
+
+    server.listen(8080).await
 }
