@@ -345,13 +345,15 @@ impl ImageServer {
     }
 }
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
+fn main() {
     let mut server = ImageServer {
         upload_to_dir: "./uploads".to_string(),
         upload_url: "/uploads".to_string(),
         port: None,
     };
 
-    server.listen(8080).await
+    actix_web::rt::System::new("server")
+        .block_on(async move {
+            server.listen(8080).await;
+        });
 }
