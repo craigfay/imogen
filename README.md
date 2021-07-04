@@ -1,15 +1,28 @@
 # About
-A prototype file server built with Rust. Each section below describes how to demo a piece of functionality.
+An Rust library for creating HTTP image servers that can:
+* accept image uploads via multi-part forms at `POST /upload`
+* serve existing uploads at `GET /uploads/{filename}.{extension}`.
+  * substitute `{extension}` with `png`, `jpeg`, or `webp` for dynamic encoding.
+  * use query string parameter `w={width}` and `h={height}` for dynamic resizing
+  * use query string parameter `w={width}` and `h={height}` for dynamic resizing
+  * use query string parameter `stretch={boolean}` to determine whether resizing
+  should affect aspect ratio. Defaults to `false`, which preserves aspect ratio.
+  * use query string parameter `sampling={method}` to specify which algorithm to
+  use for resizing. Options are `triangle`, `catmullrom`, `gaussian`, `lanczos3`, and `nearest`. Defaults to `nearest`.
 
-# Upload Files
-* Start the Rust server: `cargo run`
-* Use NodeJS to serve **index.html**: `npx serve`
-* Visit **index.html**, probably at http://localhost:5000
-* Choose a file, click submit, and it should appear in `./uploads`
+# Usage
 
-# Re-encode .png files as .webp
-* Start the Rust server: `cargo run`
-* Visit [rust.png](http://localhost:8080/rust.png)
-  * The onscreen file has been served statically from the project root
-* Visit [rust.webp](http://localhost:8080/rust.png)
-  * The onscreen file has been re-encoded and served, reducing the size by 50%
+```toml
+# Cargo.toml
+[dependencies]
+imogen = { git = "github.com/craigfay/imogen.git", ref = "1.0.0" }
+```
+
+```rust
+// main.rs
+use imogen::ImageServer;
+
+fn main() {
+    ImageServer::listen(8080);
+}
+```
