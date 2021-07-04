@@ -15,7 +15,7 @@ An Rust library for creating HTTP image servers that can:
 ```toml
 # Cargo.toml
 [dependencies]
-imogen = { git = "github.com/craigfay/imogen.git", ref = "1.0.0" }
+imogen = { git = "https://github.com/craigfay/imogen.git", ref = "1.0.0" }
 ```
 
 ```rust
