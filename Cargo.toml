@@ -1,5 +1,5 @@
 [package]
-name = "imogene"
+name = "imogen"
 version = "1.0.0"
 authors = ["craig fay <craigfay1@gmail.com>"]
 edition = "2018"
