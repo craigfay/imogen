@@ -99,6 +99,7 @@ async fn upload(mut payload: Multipart, ctx: web::Data<Context>) -> Result<HttpR
             }
         };
 
+        // Determining upload path
         let filename = filename.to_string();
         let clean_filename = strip_extension(&filename);
         let filepath = format!("{}/{}.webp", ctx.uploads_dir, clean_filename);
@@ -337,13 +338,17 @@ pub struct ImageServer;
 
 impl ImageServer {
     pub fn listen(port: u64, uploads_dir: String) {
-        let context = web::Data::new(Context { uploads_dir });
+        let ctx = web::Data::new(Context { uploads_dir });
+
+        // Creating uploads directory if non-existent
+        std::fs::create_dir_all(Path::new(&ctx.uploads_dir))
+            .expect("Unable to create uploads directory");
 
         actix_web::rt::System::new("server")
             .block_on(async move {
                 HttpServer::new(move || {
                     App::new()
-                        .app_data(context.clone())
+                        .app_data(ctx.clone())
                         .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
                         .route("/upload", web::post().to(upload))
                 })
@@ -351,7 +356,8 @@ impl ImageServer {
                 .expect(&format!("Failed to bind to port {}", port))
                 .run()
                 .await
-            });
+            })
+            .expect("Failed to create async runtime")
     }
 }
 
