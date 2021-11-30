@@ -344,19 +344,21 @@ impl ImageServer {
         std::fs::create_dir_all(Path::new(&ctx.uploads_dir))
             .expect("Unable to create uploads directory");
 
-        actix_web::rt::System::new("server")
-            .block_on(async move {
-                HttpServer::new(move || {
-                    App::new()
-                        .app_data(ctx.clone())
-                        .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
-                        .route("/upload", web::post().to(upload))
-                })
-                .bind(format!("127.0.0.1:{}", port))
-                .expect(&format!("Failed to bind to port {}", port))
-                .run()
-                .await
+        let serve_forever = async move {
+            HttpServer::new(move || {
+                App::new()
+                    .app_data(ctx.clone())
+                    .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
+                    .route("/upload", web::post().to(upload))
             })
+            .bind(format!("127.0.0.1:{}", port))
+            .expect(&format!("Failed to bind to port {}", port))
+            .run()
+            .await
+        };
+
+        actix_web::rt::System::new("server")
+            .block_on(serve_forever)
             .expect("Failed to create async runtime")
     }
 }
