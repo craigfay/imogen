@@ -31,6 +31,7 @@ use actix_web::{
 enum ImageServiceFailure {
     UnsupportedFormat,
     ImageDoesNotExist,
+    CouldNotReadToBuffer,
 }
 
 impl ImageServiceFailure {
@@ -38,6 +39,7 @@ impl ImageServiceFailure {
         match self {
             Self::UnsupportedFormat => "Unsupported file format".to_string(),
             Self::ImageDoesNotExist => "Requested image does not exist".to_string(),
+            Self::CouldNotReadToBuffer => "Could not load image into memory buffer".to_string(),
         }
     }
 }
@@ -235,7 +237,10 @@ fn image_bytes(
 
     // Reading the contents of the file into a vector of bytes
     let mut buffer: Bytes = Vec::new();
-    file.read_to_end(&mut buffer);
+    match file.read_to_end(&mut buffer) {
+        Err(_) => return Result::Err(ImageServiceFailure::CouldNotReadToBuffer),
+        Ok(_) => {},
+    };
 
     // Decoding the bytes as webp
     let webp_decoder = webp::Decoder::new(&buffer);
@@ -324,6 +329,9 @@ fn serve_image_via_http(
             }
             ImageServiceFailure::UnsupportedFormat => {
                 HttpResponse::BadRequest().body(failure.to_string())
+            }
+            ImageServiceFailure::CouldNotReadToBuffer => {
+                HttpResponse::InternalServerError().body(failure.to_string())
             }
         }
     }
