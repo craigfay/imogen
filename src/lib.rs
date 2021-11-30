@@ -4,7 +4,6 @@ use std::io::ErrorKind as IOError;
 use image::io::Reader as ImageReader;
 use image::imageops::FilterType;
 use image::{
-    ImageError,
     ImageOutputFormat,
     GenericImageView,
     ImageFormat,
@@ -23,7 +22,6 @@ use actix_web::{
     web,
     App,
     HttpResponse,
-    HttpRequest,
     HttpServer,
     Error,
 };
@@ -206,24 +204,6 @@ async fn upload(mut payload: Multipart, ctx: web::Data<Context>) -> Result<HttpR
     )
 }
 
-
-// Return the bytes of a static png file after converting to webp format.
-fn image_as_webp() -> Result<Bytes, ImageError> {
-    let full_filename = "rust.png";
-    let mut buffer: Bytes = Vec::new();
-
-    let img = ImageReader::open(full_filename)?.with_guessed_format()?;
-    let decoded = img.decode()?;
-
-    let webp_encoder = webp::Encoder::from_image(&decoded);
-    let webp = webp_encoder.encode_lossless();
-
-    for i in 0..webp.len() {
-        buffer.push(webp[i]);
-    }
-
-    Ok(buffer)
-}
 
 // Given a set of image parameters, read an image from file, maybe apply
 // transformations to it, and return its binary data.
