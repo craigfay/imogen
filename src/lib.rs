@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::path::Path;
+use std::io::ErrorKind as IOError;
 use image::io::Reader as ImageReader;
 use image::imageops::FilterType;
 use image::{
@@ -31,6 +32,7 @@ use actix_web::{
 enum ImageServiceFailure {
     UnsupportedFormat,
     ImageDoesNotExist,
+    MemoryOverflow,
     CouldNotReadToBuffer,
 }
 
@@ -39,6 +41,7 @@ impl ImageServiceFailure {
         match self {
             Self::UnsupportedFormat => "Unsupported file format".to_string(),
             Self::ImageDoesNotExist => "Requested image does not exist".to_string(),
+            Self::MemoryOverflow => "Failed to allocate adequate memory".to_string(),
             Self::CouldNotReadToBuffer => "Could not load image into memory buffer".to_string(),
         }
     }
@@ -231,15 +234,18 @@ fn image_bytes(
     // Attempting to open a file
     let filepath = format!("./uploads/{}.webp", required.filename);
     let mut file = match File::open(filepath) {
-        Err(_) => return Result::Err(ImageServiceFailure::ImageDoesNotExist),
+        Err(_) => return Err(ImageServiceFailure::ImageDoesNotExist),
         Ok(f) => f,
     };
 
     // Reading the contents of the file into a vector of bytes
     let mut buffer: Bytes = Vec::new();
     match file.read_to_end(&mut buffer) {
-        Err(_) => return Result::Err(ImageServiceFailure::CouldNotReadToBuffer),
         Ok(_) => {},
+        Err(io_err) => return Err( match io_err.kind() {
+            IOError::OutOfMemory => ImageServiceFailure::MemoryOverflow,
+            _ => ImageServiceFailure::CouldNotReadToBuffer,
+        }),
     };
 
     // Decoding the bytes as webp
@@ -329,6 +335,9 @@ fn serve_image_via_http(
             }
             ImageServiceFailure::UnsupportedFormat => {
                 HttpResponse::BadRequest().body(failure.to_string())
+            }
+            ImageServiceFailure::MemoryOverflow => {
+                HttpResponse::InternalServerError().body(failure.to_string())
             }
             ImageServiceFailure::CouldNotReadToBuffer => {
                 HttpResponse::InternalServerError().body(failure.to_string())
