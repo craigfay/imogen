@@ -917,7 +917,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "imogene"
+name = "imogen"
 version = "1.0.0"
 dependencies = [
  "actix-multipart",

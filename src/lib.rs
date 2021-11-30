@@ -71,7 +71,7 @@ impl UploadResult {
 }
 
 // Respond to a request to upload a file contained in a multipart form stream
-async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
+async fn upload(mut payload: Multipart, ctx: web::Data<Context>) -> Result<HttpResponse, Error> {
     let mut results: Vec<UploadResult> = vec![];
 
     // Iterating over each part of the multipart form
@@ -101,7 +101,7 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
 
         let filename = filename.to_string();
         let clean_filename = strip_extension(&filename);
-        let filepath = format!("./uploads/{}.webp", clean_filename);
+        let filepath = format!("{}/{}.webp", ctx.uploads_dir, clean_filename);
         if filename != "" { result.filename = Some(filename); }
 
         // Preventing duplicate filenames
@@ -328,15 +328,22 @@ fn serve_image_via_http(
     }
 }
 
+struct Context {
+    uploads_dir: String,
+}
+
 
 pub struct ImageServer;
 
 impl ImageServer {
-    pub fn listen(port: u64) {
+    pub fn listen(port: u64, uploads_dir: String) {
+        let context = web::Data::new(Context { uploads_dir });
+
         actix_web::rt::System::new("server")
             .block_on(async move {
-                HttpServer::new(|| {
+                HttpServer::new(move || {
                     App::new()
+                        .app_data(context.clone())
                         .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
                         .route("/upload", web::post().to(upload))
                 })
