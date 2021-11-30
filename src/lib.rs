@@ -209,10 +209,11 @@ async fn upload(mut payload: Multipart, ctx: web::Data<Context>) -> Result<HttpR
 // transformations to it, and return its binary data.
 fn image_bytes(
     required: &RequiredImageParams,
-    optional: &OptionalImageParams
+    optional: &OptionalImageParams,
+    uploads_dir: &str,
 ) -> ImageServiceResult {
     // Attempting to open a file
-    let filepath = format!("./uploads/{}.webp", required.filename);
+    let filepath = format!("{}/{}.webp", uploads_dir, required.filename);
     let mut file = match File::open(filepath) {
         Err(_) => return Err(ImageServiceFailure::ImageDoesNotExist),
         Ok(f) => f,
@@ -298,12 +299,13 @@ struct OptionalImageParams {
 
 fn serve_image_via_http(
     required: web::Path<RequiredImageParams>,
-    optional: web::Query<OptionalImageParams>
+    optional: web::Query<OptionalImageParams>,
+    ctx: web::Data<Context>,
 ) -> HttpResponse {
     let required = required.into_inner();
     let optional = optional.into_inner();
 
-    match image_bytes(&required, &optional) {
+    match image_bytes(&required, &optional, &ctx.uploads_dir) {
         Ok(buffer) => {
             HttpResponse::Ok()
                 .header("content-type", format!("image/{}", required.extension))
