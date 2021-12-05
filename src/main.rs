@@ -8,7 +8,7 @@ fn main() {
         .expect("Invalid port provided");
 
     let uploads_dir = env::args().nth(2)
-        .unwrap_or("./uploads".to_string());
+        .unwrap_or("./images".to_string());
 
     ImageServer::listen(port, uploads_dir);
 }
