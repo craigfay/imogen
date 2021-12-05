@@ -18,9 +18,11 @@ use std::io::{
     Read,
 };
 use actix_multipart::Multipart;
+use actix_files::NamedFile;
 use actix_web::{
     web,
     App,
+    HttpRequest,
     HttpResponse,
     HttpServer,
     Error,
@@ -297,13 +299,49 @@ struct OptionalImageParams {
     h: Option<u32>,
 }
 
+fn potentially_streamable_file(path: &str) -> Option<NamedFile> {
+    match NamedFile::open(path) {
+        Ok(file) => Some(file),
+        Err(_) => None,
+    }
+}
+
+fn respond_if_file_exists(filepath: &str, req: &HttpRequest) -> Option<HttpResponse> {
+    match potentially_streamable_file(&filepath) {
+        None => None,
+        Some(file) => match file.into_response(&req) {
+            Ok(response) => Some(response),
+            Err(_) => None,
+        }
+    }
+}
+
+
+fn path_to_requested_file_if_on_disk(
+    req: & HttpRequest,
+    ctx: &web::Data<Context>
+) -> String {
+    format!("{}/{}", ctx.uploads_dir, req.path())
+}
+
+
 fn serve_image_via_http(
+    req: HttpRequest,
     required: web::Path<RequiredImageParams>,
     optional: web::Query<OptionalImageParams>,
     ctx: web::Data<Context>,
 ) -> HttpResponse {
     let required = required.into_inner();
     let optional = optional.into_inner();
+
+
+    let filepath = path_to_requested_file_if_on_disk(&req, &ctx);
+
+    match respond_if_file_exists(&filepath, &req) {
+        Some(response) => return response,
+        None => {},
+    };
+
 
     match image_bytes(&required, &optional, &ctx.uploads_dir) {
         Ok(buffer) => {
@@ -347,6 +385,7 @@ impl ImageServer {
             HttpServer::new(move || {
                 App::new()
                     .app_data(ctx.clone())
+                    // .service(Files::new("/", "./uploads").prefer_utf8(true))
                     .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
                     .route("/upload", web::post().to(upload))
             })
