@@ -306,7 +306,11 @@ fn potentially_streamable_file(path: &str) -> Option<NamedFile> {
     }
 }
 
-fn respond_if_file_exists(filepath: &str, req: &HttpRequest) -> Option<HttpResponse> {
+fn try_streaming_requested_file_from_disk(
+    req: &HttpRequest,
+    ctx: &web::Data<Context>
+) -> Option<HttpResponse> {
+    let filepath = path_to_requested_file_if_exists(&req, &ctx);
     match potentially_streamable_file(&filepath) {
         None => None,
         Some(file) => match file.into_response(&req) {
@@ -316,8 +320,7 @@ fn respond_if_file_exists(filepath: &str, req: &HttpRequest) -> Option<HttpRespo
     }
 }
 
-
-fn path_to_requested_file_if_on_disk(
+fn path_to_requested_file_if_exists(
     req: & HttpRequest,
     ctx: &web::Data<Context>
 ) -> String {
@@ -334,14 +337,10 @@ fn serve_image_via_http(
     let required = required.into_inner();
     let optional = optional.into_inner();
 
-
-    let filepath = path_to_requested_file_if_on_disk(&req, &ctx);
-
-    match respond_if_file_exists(&filepath, &req) {
+    match try_streaming_requested_file_from_disk(&req, &ctx) {
         Some(response) => return response,
         None => {},
     };
-
 
     match image_bytes(&required, &optional, &ctx.uploads_dir) {
         Ok(buffer) => {
