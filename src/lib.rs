@@ -307,11 +307,10 @@ fn potentially_streamable_file(path: &str) -> Option<NamedFile> {
     }
 }
 
-fn try_streaming_requested_file_from_disk(
+fn try_streaming_preprocessed_file_from_disk(
+    filepath: &str,
     req: &HttpRequest,
-    ctx: &web::Data<Context>
 ) -> Option<HttpResponse> {
-    let filepath = path_to_requested_file_if_exists(&req, &ctx);
     match potentially_streamable_file(&filepath) {
         None => None,
         Some(file) => match file.into_response(&req) {
@@ -325,7 +324,7 @@ fn path_to_requested_file_if_exists(
     req: & HttpRequest,
     ctx: &web::Data<Context>
 ) -> String {
-    format!("{}/{}", ctx.uploads_dir, req.path())
+    format!("{}/{}?{}", ctx.uploads_dir, req.path(), req.query_string())
 }
 
 
@@ -363,24 +362,32 @@ fn serve_image_via_http(
     let required = required.into_inner();
     let optional = optional.into_inner();
 
-    match try_streaming_requested_file_from_disk(&req, &ctx) {
+    let preprocessed_filename = match req.query_string() != "" || required.extension != "webp" {
+        true => format!("{}/{}?{}.{}",ctx.uploads_dir, required.filename, req.query_string(), required.extension),
+        false => format!("{}/{}.{}",ctx.uploads_dir, required.filename, required.extension),
+    };
+
+    match try_streaming_preprocessed_file_from_disk(&preprocessed_filename, &req) {
         Some(response) => return response,
         None => {},
     };
 
-    let filepath = format!("{}/{}.webp", ctx.uploads_dir, required.filename);
+    let unprocessed_filename = format!("{}/{}.webp", ctx.uploads_dir, required.filename);
 
-    let unprocessed_image = match try_loading_unprocessed_image(&filepath) {
+    let unprocessed_image = match try_loading_unprocessed_image(&unprocessed_filename) {
         Err(failure) => return failure.as_http_response(),
         Ok(bytes) => bytes,
     };
 
-    let response = match try_processing_image(unprocessed_image, &optional, &required) {
-        Ok(buffer) => image_buffer_as_http_response(buffer, &required.extension),
-        Err(failure) => failure.as_http_response(),
+    let processed_image = match try_processing_image(unprocessed_image, &optional, &required) {
+        Err(failure) => return failure.as_http_response(),
+        Ok(buffer) => buffer,
     };
 
-    response
+    let mut file = File::create(preprocessed_filename).unwrap();
+    file.write_all(&processed_image);
+    
+    image_buffer_as_http_response(processed_image, &required.extension)
 }
 
 struct Context {
