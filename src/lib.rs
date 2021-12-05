@@ -206,16 +206,7 @@ async fn upload(mut payload: Multipart, ctx: web::Data<Context>) -> Result<HttpR
     )
 }
 
-
-// Given a set of image parameters, read an image from file, maybe apply
-// transformations to it, and return its binary data.
-fn image_bytes(
-    required: &RequiredImageParams,
-    optional: &OptionalImageParams,
-    uploads_dir: &str,
-) -> ImageServiceResult {
-    // Attempting to open a file
-    let filepath = format!("{}/{}.webp", uploads_dir, required.filename);
+fn try_loading_unprocessed_image(filepath: &str) -> ImageServiceResult {
     let mut file = match File::open(filepath) {
         Err(_) => return Err(ImageServiceFailure::ImageDoesNotExist),
         Ok(f) => f,
@@ -231,7 +222,16 @@ fn image_bytes(
         }),
     };
 
-    // Decoding the bytes as webp
+    Ok(buffer)
+}
+
+
+fn try_processing_image(
+    buffer: Bytes,
+    optional: &OptionalImageParams,
+    required: &RequiredImageParams,
+) -> ImageServiceResult {
+    // Decoding bytes as webp
     let webp_decoder = webp::Decoder::new(&buffer);
     let webp_image = webp_decoder.decode().unwrap();
     let mut dynamic_image = webp_image.to_image();
@@ -285,6 +285,7 @@ fn image_bytes(
     }
 }
 
+
 #[derive(Deserialize, Debug)]
 struct RequiredImageParams {
     filename: String,
@@ -328,6 +329,31 @@ fn path_to_requested_file_if_exists(
 }
 
 
+impl ImageServiceFailure {
+    fn as_http_response(&self) -> HttpResponse {
+        match self {
+            ImageServiceFailure::ImageDoesNotExist => {
+                HttpResponse::NotFound().body(self.to_string())
+            }
+            ImageServiceFailure::UnsupportedFormat => {
+                HttpResponse::BadRequest().body(self.to_string())
+            }
+            ImageServiceFailure::MemoryOverflow => {
+                HttpResponse::InternalServerError().body(self.to_string())
+            }
+            ImageServiceFailure::CouldNotReadToBuffer => {
+                HttpResponse::InternalServerError().body(self.to_string())
+            }
+        }
+    }
+}
+
+fn image_buffer_as_http_response(buffer: Bytes, extension: &str) -> HttpResponse {
+    HttpResponse::Ok()
+        .header("content-type", format!("image/{}", extension))
+        .body(buffer)
+}
+
 fn serve_image_via_http(
     req: HttpRequest,
     required: web::Path<RequiredImageParams>,
@@ -342,27 +368,19 @@ fn serve_image_via_http(
         None => {},
     };
 
-    match image_bytes(&required, &optional, &ctx.uploads_dir) {
-        Ok(buffer) => {
-            HttpResponse::Ok()
-                .header("content-type", format!("image/{}", required.extension))
-                .body(buffer)
-        },
-        Err(failure) => match failure {
-            ImageServiceFailure::ImageDoesNotExist => {
-                HttpResponse::NotFound().body(failure.to_string())
-            }
-            ImageServiceFailure::UnsupportedFormat => {
-                HttpResponse::BadRequest().body(failure.to_string())
-            }
-            ImageServiceFailure::MemoryOverflow => {
-                HttpResponse::InternalServerError().body(failure.to_string())
-            }
-            ImageServiceFailure::CouldNotReadToBuffer => {
-                HttpResponse::InternalServerError().body(failure.to_string())
-            }
-        }
-    }
+    let filepath = format!("{}/{}.webp", ctx.uploads_dir, required.filename);
+
+    let unprocessed_image = match try_loading_unprocessed_image(&filepath) {
+        Err(failure) => return failure.as_http_response(),
+        Ok(bytes) => bytes,
+    };
+
+    let response = match try_processing_image(unprocessed_image, &optional, &required) {
+        Ok(buffer) => image_buffer_as_http_response(buffer, &required.extension),
+        Err(failure) => failure.as_http_response(),
+    };
+
+    response
 }
 
 struct Context {
