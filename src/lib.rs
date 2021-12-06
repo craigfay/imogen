@@ -353,25 +353,75 @@ fn image_buffer_as_http_response(buffer: Bytes, extension: &str) -> HttpResponse
         .body(buffer)
 }
 
-struct ImageRequest {
-    req: HttpRequest,
-    path_to_preprocessed: String,
-    path_to_unprocessed: String,
-    processing: ProcessingInstructions,
-    // extension: String,
-    // options: ProcessingInstructions,
+
+
+fn build_processing_suffix(req: &HttpRequest) -> String {
+    let qs = req.query_string();
+    match qs.len() {
+        0 => "".to_string(),
+        _ => format!("?{}", qs),
+    }
 }
 
-// impl ImageRequest {
-//     fn build(
-//         req: HttpRequest,
-//         required: FileDescription,
-//         optional: ProcessingInstructions,
-//         config: web::Data<ServerConfig>,
-//     ) -> Self {
+fn build_path_to_preprocessed_file(
+    file_desc: &FileDescription,
+    processing_suffix: &String,
+    config: &ServerConfig,
+) -> String {
+    format!(
+        "{}/{}{}.{}",
+        config.uploads_dir,
+        file_desc.filename,
+        processing_suffix,
+        file_desc.extension,
+    )
+}
 
-//     }
-// }
+fn build_path_to_unprocessed_file(
+    file_desc: &FileDescription,
+    config: &ServerConfig,
+) -> String {
+    format!(
+        "{}/{}.{}",
+        config.uploads_dir,
+        file_desc.filename,
+        file_desc.extension,
+    )
+}
+
+struct ImageRequest {
+    req: HttpRequest,
+    filepath_if_preprocessed: String,
+    filepath_if_unprocessed: String,
+    processing: ProcessingInstructions,
+}
+
+impl ImageRequest {
+    fn build(
+        req: HttpRequest,
+        file_desc: web::Path<FileDescription>,
+        processing: web::Query<ProcessingInstructions>,
+        config: web::Data<ServerConfig>,
+    ) -> Self {
+        let processing = processing.into_inner();
+        let file_desc = file_desc.into_inner();
+        let processing_suffix = build_processing_suffix(&req);
+
+        Self {
+            req,
+            processing,
+            filepath_if_preprocessed: build_path_to_preprocessed_file(
+                &file_desc,
+                &processing_suffix,
+                &config,
+            ),
+            filepath_if_unprocessed: build_path_to_unprocessed_file(
+                &file_desc,
+                &config,
+            ),
+        }
+    }
+}
 
 fn serve_image_via_http(
     req: HttpRequest,
