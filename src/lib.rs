@@ -76,7 +76,7 @@ impl UploadResult {
 }
 
 // Respond to a request to upload a file contained in a multipart form stream
-async fn upload(mut payload: Multipart, ctx: web::Data<Context>) -> Result<HttpResponse, Error> {
+async fn upload(mut payload: Multipart, config: web::Data<ServerConfig>) -> Result<HttpResponse, Error> {
     let mut results: Vec<UploadResult> = vec![];
 
     // Iterating over each part of the multipart form
@@ -107,7 +107,7 @@ async fn upload(mut payload: Multipart, ctx: web::Data<Context>) -> Result<HttpR
         // Determining upload path
         let filename = filename.to_string();
         let clean_filename = strip_extension(&filename);
-        let filepath = format!("{}/{}.webp", ctx.uploads_dir, clean_filename);
+        let filepath = format!("{}/{}.webp", config.uploads_dir, clean_filename);
         if filename != "" { result.filename = Some(filename); }
 
         // Preventing duplicate filenames
@@ -228,8 +228,8 @@ fn try_loading_unprocessed_image(filepath: &str) -> ImageServiceResult {
 
 fn try_processing_image(
     buffer: Bytes,
-    optional: &OptionalImageParams,
-    required: &RequiredImageParams,
+    optional: &ProcessingInstructions,
+    required: &FileDescription,
 ) -> ImageServiceResult {
     // Decoding bytes as webp
     let webp_decoder = webp::Decoder::new(&buffer);
@@ -287,13 +287,13 @@ fn try_processing_image(
 
 
 #[derive(Deserialize, Debug)]
-struct RequiredImageParams {
+struct FileDescription {
     filename: String,
     extension: String,
 }
 
 #[derive(Deserialize, Debug)]
-struct OptionalImageParams {
+struct ProcessingInstructions {
     stretch: Option<bool>,
     sampling: Option<String>,
     w: Option<u32>,
@@ -322,9 +322,9 @@ fn try_streaming_preprocessed_file_from_disk(
 
 fn path_to_requested_file_if_exists(
     req: & HttpRequest,
-    ctx: &web::Data<Context>
+    config: &web::Data<ServerConfig>
 ) -> String {
-    format!("{}/{}?{}", ctx.uploads_dir, req.path(), req.query_string())
+    format!("{}/{}?{}", config.uploads_dir, req.path(), req.query_string())
 }
 
 
@@ -353,18 +353,38 @@ fn image_buffer_as_http_response(buffer: Bytes, extension: &str) -> HttpResponse
         .body(buffer)
 }
 
+struct ImageRequest {
+    req: HttpRequest,
+    path_to_preprocessed: String,
+    path_to_unprocessed: String,
+    processing: ProcessingInstructions,
+    // extension: String,
+    // options: ProcessingInstructions,
+}
+
+// impl ImageRequest {
+//     fn build(
+//         req: HttpRequest,
+//         required: FileDescription,
+//         optional: ProcessingInstructions,
+//         config: web::Data<ServerConfig>,
+//     ) -> Self {
+
+//     }
+// }
+
 fn serve_image_via_http(
     req: HttpRequest,
-    required: web::Path<RequiredImageParams>,
-    optional: web::Query<OptionalImageParams>,
-    ctx: web::Data<Context>,
+    required: web::Path<FileDescription>,
+    optional: web::Query<ProcessingInstructions>,
+    config: web::Data<ServerConfig>,
 ) -> HttpResponse {
     let required = required.into_inner();
     let optional = optional.into_inner();
 
     let preprocessed_filename = match req.query_string() != "" || required.extension != "webp" {
-        true => format!("{}/{}?{}.{}",ctx.uploads_dir, required.filename, req.query_string(), required.extension),
-        false => format!("{}/{}.{}",ctx.uploads_dir, required.filename, required.extension),
+        true => format!("{}/{}?{}.{}",config.uploads_dir, required.filename, req.query_string(), required.extension),
+        false => format!("{}/{}.{}",config.uploads_dir, required.filename, required.extension),
     };
 
     match try_streaming_preprocessed_file_from_disk(&preprocessed_filename, &req) {
@@ -372,7 +392,7 @@ fn serve_image_via_http(
         None => {},
     };
 
-    let unprocessed_filename = format!("{}/{}.webp", ctx.uploads_dir, required.filename);
+    let unprocessed_filename = format!("{}/{}.webp", config.uploads_dir, required.filename);
 
     let unprocessed_image = match try_loading_unprocessed_image(&unprocessed_filename) {
         Err(failure) => return failure.as_http_response(),
@@ -390,7 +410,7 @@ fn serve_image_via_http(
     image_buffer_as_http_response(processed_image, &required.extension)
 }
 
-struct Context {
+struct ServerConfig {
     uploads_dir: String,
 }
 
@@ -399,16 +419,16 @@ pub struct ImageServer;
 
 impl ImageServer {
     pub fn listen(port: u64, uploads_dir: String) {
-        let ctx = web::Data::new(Context { uploads_dir });
+        let config = web::Data::new(ServerConfig { uploads_dir });
 
         // Creating uploads directory if non-existent
-        std::fs::create_dir_all(Path::new(&ctx.uploads_dir))
+        std::fs::create_dir_all(Path::new(&config.uploads_dir))
             .expect("Unable to create uploads directory");
 
         let serve_forever = async move {
             HttpServer::new(move || {
                 App::new()
-                    .app_data(ctx.clone())
+                    .app_data(config.clone())
                     // .service(Files::new("/", "./uploads").prefer_utf8(true))
                     .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
                     .route("/upload", web::post().to(upload))
