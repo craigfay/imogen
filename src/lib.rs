@@ -483,7 +483,7 @@ impl ImageServer {
                     .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
                     .route("/upload", web::post().to(upload))
             })
-            .bind(format!("127.0.0.1:{}", port))
+            .bind(format!("0.0.0.0:{}", port))
             .expect(&format!("Failed to bind to port {}", port))
             .run()
             .await
