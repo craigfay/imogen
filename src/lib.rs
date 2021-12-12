@@ -19,6 +19,7 @@ use std::io::{
 };
 use actix_multipart::Multipart;
 use actix_files::NamedFile;
+use actix_cors::{Cors};
 use actix_web::{
     web,
     App,
@@ -479,7 +480,7 @@ impl ImageServer {
             HttpServer::new(move || {
                 App::new()
                     .app_data(config.clone())
-                    // .service(Files::new("/", "./uploads").prefer_utf8(true))
+                    .wrap(Cors::permissive())
                     .route("/{filename}.{extension}", web::get().to(serve_image_via_http))
                     .route("/upload", web::post().to(upload))
             })
